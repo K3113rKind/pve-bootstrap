@@ -16,7 +16,7 @@
 
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 STATE_DIR="/var/lib/pve-bootstrap"
 STATE_FILE="$STATE_DIR/initialized"
 
