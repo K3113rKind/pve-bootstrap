@@ -118,7 +118,13 @@ Nach dem ersten erfolgreichen Lauf wird `/var/lib/pve-bootstrap/initialized` ang
 
 MIT
 
-## Ähnliche Projekte
+## Credits
 
-- [BassT23/Proxmox](https://github.com/BassT23/Proxmox) — Ultimate Updater, wird hier installiert
-- [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE) — Helper-Scripts für PVE
+Dieses Skript wurde inspiriert durch und nutzt:
+
+- [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE) (MIT) — 
+  Vorbild für die Post-Install-Struktur (Repos, Nag, Postfix)
+- [BassT23/Proxmox](https://github.com/BassT23/Proxmox) (GPL) — 
+  wird via Installer als Dependency eingebunden (Ultimate Updater für die wöchentlichen Updates)
+
+Eigenständige Implementierung, keine Code-Übernahme.
