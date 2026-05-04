@@ -161,6 +161,8 @@ Offizielle Upgrade-Anleitung: https://pve.proxmox.com/wiki/Upgrade_from_8_to_9
 - LXC-Bootstrap Output kompakt: nur Zusammenfassungszeile pro Container
 - Dry-Run Logging korrigiert: kein fälschliches `[OK]` mehr bei nicht ausgeführten Aktionen
 - PVE 9.1 / Debian Trixie getestet und bestätigt
+- fail2ban proxmox-Jail nutzt jetzt `journalmatch` statt `logpath` (korrekt für Debian 12+/Trixie ohne rsyslog)
+- LXC-Bootstrap erzwingt `LC_ALL=C` für apt-Output (verhindert Probleme mit deutschen Locales)
 
 ### Initial
 - Modulare Architektur mit Initial/Drift-Modus
