@@ -457,13 +457,13 @@ if $INITIAL_RUN && ! $DRY_RUN; then
   log_ok "State-Marker gesetzt: $STATE_FILE"
 
   # Globalen Befehl anlegen (wie 'update' vom Ultimate Updater)
-  local symlink="/usr/local/bin/pve-bootstrap"
-  local target="$(realpath "$0")"
-  if [[ -L "$symlink" ]] && [[ "$(readlink "$symlink")" == "$target" ]]; then
-    log_skip "Symlink $symlink bereits korrekt"
+  SYMLINK="/usr/local/bin/pve-bootstrap"
+  TARGET="$(realpath "$0")"
+  if [[ -L "$SYMLINK" ]] && [[ "$(readlink "$SYMLINK")" == "$TARGET" ]]; then
+    log_skip "Symlink $SYMLINK bereits korrekt"
   else
-    ln -sf "$target" "$symlink"
-    log_ok "Befehl verfügbar: pve-bootstrap (-> $target)"
+    ln -sf "$TARGET" "$SYMLINK"
+    log_ok "Befehl verfügbar: pve-bootstrap (-> $TARGET)"
   fi
 fi
 
