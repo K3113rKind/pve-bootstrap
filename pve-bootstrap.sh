@@ -215,7 +215,7 @@ mod_tools() {
   fi
   log "Fehlend:$missing"
   run_or_dry apt-get install -y $missing
-  log_ok "Tools installiert"
+  $DRY_RUN || log_ok "Tools installiert"
 }
 
 # --- Modul: fail2ban (init only) --------------------------------------------
@@ -228,7 +228,11 @@ mod_fail2ban() {
   command -v fail2ban-client >/dev/null 2>&1 || { log_warn "fail2ban nicht installiert"; return; }
 
   local proxmox_filter="/etc/fail2ban/filter.d/proxmox.conf"
-  if [[ ! -f "$proxmox_filter" ]] && ! $DRY_RUN; then
+  if [[ -f "$proxmox_filter" ]]; then
+    log_skip "Proxmox-Filter existiert"
+  elif $DRY_RUN; then
+    log_chg "(dry-run) würde $proxmox_filter anlegen"
+  else
     cat > "$proxmox_filter" <<'EOF'
 [Definition]
 failregex = pvedaemon\[.*authentication failure; rhost=<HOST> user=.* msg=.*
@@ -238,10 +242,13 @@ EOF
   fi
 
   local jail="/etc/fail2ban/jail.local"
-  if [[ ! -f "$jail" ]] || ! grep -q '\[proxmox\]' "$jail"; then
-    if ! $DRY_RUN; then
-      [[ -f "$jail" ]] && cp "$jail" "${jail}.bak.$(date +%Y%m%d-%H%M%S)"
-      cat > "$jail" <<'EOF'
+  if [[ -f "$jail" ]] && grep -q '\[proxmox\]' "$jail"; then
+    log_skip "jail.local enthält bereits [proxmox]"
+  elif $DRY_RUN; then
+    log_chg "(dry-run) würde $jail mit [sshd]+[proxmox] schreiben + fail2ban restart"
+  else
+    [[ -f "$jail" ]] && cp "$jail" "${jail}.bak.$(date +%Y%m%d-%H%M%S)"
+    cat > "$jail" <<'EOF'
 [DEFAULT]
 bantime  = 1h
 findtime = 10m
@@ -260,11 +267,8 @@ logpath  = /var/log/daemon.log
 maxretry = 3
 bantime  = 1h
 EOF
-      systemctl restart fail2ban
-      log_ok "jail.local geschrieben + fail2ban restart"
-    fi
-  else
-    log_skip "jail.local enthält bereits [proxmox]"
+    systemctl restart fail2ban
+    log_ok "jail.local geschrieben + fail2ban restart"
   fi
 }
 
@@ -291,7 +295,7 @@ mod_nfs() {
     run_or_dry pvesm add nfs "$name" \
       --server "$NFS_SERVER" --export "$export" \
       --content "$content" --prune-backups "keep-all=1"
-    log_ok "Storage '$name' hinzugefügt"
+    $DRY_RUN || log_ok "Storage '$name' hinzugefügt"
   done
 }
 
@@ -337,7 +341,7 @@ mod_uu_config() {
       log_skip "$key bereits = \"$target\""
     elif $INITIAL_RUN; then
       run_or_dry sed -i "s/^${key}=\".*\"/${key}=\"${target}\"/" "$conf"
-      log_ok "$key gesetzt auf \"$target\""
+      $DRY_RUN || log_ok "$key gesetzt auf \"$target\""
       changes=$((changes+1))
     else
       log_warn "Drift in $key: aktuell=\"$current\" soll=\"$target\" (manuell ändern oder --force-initial)"
@@ -378,10 +382,12 @@ mod_cron() {
     return
   fi
 
-  if ! $DRY_RUN; then
+  if $DRY_RUN; then
+    log_chg "(dry-run) würde Cron eintragen: $our_line"
+  else
     (echo "$existing"; echo "$our_line") | crontab -
+    log_ok "Cron eingetragen ($CRON_SCHEDULE)"
   fi
-  log_ok "Cron eingetragen ($CRON_SCHEDULE)"
 }
 
 # --- Modul: LXC-Bootstrap (drift-aware, läuft auch im Drift-Modus) ----------
@@ -408,11 +414,11 @@ EOF
 
   if [[ -f "$helper" ]] && [[ "$(cat "$helper")" == "$desired_content" ]]; then
     log_skip "$helper aktuell"
+  elif $DRY_RUN; then
+    log_chg "(dry-run) würde $helper schreiben"
   else
-    if ! $DRY_RUN; then
-      echo "$desired_content" > "$helper"
-      chmod +x "$helper"
-    fi
+    echo "$desired_content" > "$helper"
+    chmod +x "$helper"
     log_ok "$helper geschrieben"
   fi
 
