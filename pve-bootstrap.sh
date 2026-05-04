@@ -260,12 +260,13 @@ enabled = true
 port    = ssh
 
 [proxmox]
-enabled  = true
-port     = https,http,8006
-filter   = proxmox
-logpath  = /var/log/daemon.log
-maxretry = 3
-bantime  = 1h
+enabled      = true
+port         = https,http,8006
+filter       = proxmox
+backend      = systemd
+journalmatch = _SYSTEMD_UNIT=pvedaemon.service
+maxretry     = 3
+bantime      = 1h
 EOF
     systemctl restart fail2ban
     log_ok "jail.local geschrieben + fail2ban restart"
@@ -413,7 +414,7 @@ for CT in \$(pct list | tail -n +2 | awk '{print \$1}'); do
     continue
   fi
   echo "==> CT \$CT (\$OS)"
-  pct exec "\$CT" -- bash -c "apt-get update -qq && apt-get install -y \$BASE_PKGS" 2>&1 | grep -E '^(0 upgraded|[0-9]+ newly|E:|Err:)' || true
+  pct exec "\$CT" -- bash -c "LC_ALL=C apt-get update -qq && LC_ALL=C apt-get install -y \$BASE_PKGS" 2>&1 | grep -E '^(0 upgraded|[0-9]+ newly|E:|Err:)' || true
 done
 EOF
 )
