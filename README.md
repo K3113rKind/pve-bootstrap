@@ -179,3 +179,4 @@ Inspiriert durch und nutzt:
 - [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE) (MIT) — Vorbild für Post-Install-Struktur
 
 Eigenständige Implementierung, keine Code-Übernahme.
+Teile dieses Codes wurden mit Hilfe von KI generiert.
