@@ -450,11 +450,21 @@ mod_uu_config
 mod_cron
 mod_lxc_bootstrap
 
-# State setzen
+# State setzen + Symlink anlegen
 if $INITIAL_RUN && ! $DRY_RUN; then
   mkdir -p "$STATE_DIR"
   date -Iseconds > "$STATE_FILE"
   log_ok "State-Marker gesetzt: $STATE_FILE"
+
+  # Globalen Befehl anlegen (wie 'update' vom Ultimate Updater)
+  local symlink="/usr/local/bin/pve-bootstrap"
+  local target="$(realpath "$0")"
+  if [[ -L "$symlink" ]] && [[ "$(readlink "$symlink")" == "$target" ]]; then
+    log_skip "Symlink $symlink bereits korrekt"
+  else
+    ln -sf "$target" "$symlink"
+    log_ok "Befehl verfügbar: pve-bootstrap (-> $target)"
+  fi
 fi
 
 section "Fertig"
