@@ -37,7 +37,7 @@ Setzt einen frisch installierten PVE-Server in einem Rutsch auf produktiven Stan
 
 ```bash
 # Auf den PVE-Host kopieren (z.B. nach /root/)
-git clone https://github.com/<USER>/pve-bootstrap.git
+git clone https://github.com/K3113rKind/pve-bootstrap.git
 cd pve-bootstrap
 
 # Lokale Config anlegen (NFS-Server, eigene Werte)
