@@ -401,11 +401,17 @@ mod_lxc_bootstrap() {
 #!/bin/bash
 # Auto-generiert von pve-bootstrap.sh - nicht von Hand editieren
 BASE_PKGS="$LXC_BASE_PKGS"
+SKIP_TAG="no-bootstrap"
 for CT in \$(pct list | tail -n +2 | awk '{print \$1}'); do
   STATUS=\$(pct status "\$CT")
   OS=\$(pct config "\$CT" | awk '/^ostype/ {print \$2}')
+  TAGS=\$(pct config "\$CT" | awk '/^tags:/ {print \$2}')
   [[ "\$STATUS" != "status: running" ]] && continue
   [[ "\$OS" =~ debian|ubuntu ]] || continue
+  if [[ ",\$TAGS," == *",\$SKIP_TAG,"* ]]; then
+    echo "==> CT \$CT (\$OS) [SKIP - Tag '\$SKIP_TAG' gesetzt]"
+    continue
+  fi
   echo "==> CT \$CT (\$OS)"
   pct exec "\$CT" -- bash -c "apt-get update -qq && apt-get install -y \$BASE_PKGS" 2>&1 | tail -5
 done
