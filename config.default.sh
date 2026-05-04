@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # config.default.sh
-# Generische Defaults - wird committed, ist public.
+# Generische Defaults.
 # Nicht hier editieren, sondern in config.local.sh überschreiben!
 # =============================================================================
 
