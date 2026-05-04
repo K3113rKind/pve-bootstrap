@@ -101,6 +101,14 @@ pct set 151 --tags no-bootstrap
 
 Der LXC-Bootstrap überspringt Container mit diesem Tag automatisch.
 
+## LXC-Bootstrap: installierte Pakete
+
+Folgende Pakete werden in alle laufenden Debian/Ubuntu-Container installiert:
+
+`sudo`, `locales`, `bash-completion`, `curl`, `wget`, `gnupg`, `ca-certificates`, `htop`, `net-tools`, `iputils-ping`, `dnsutils`, `rsync`
+
+Container mit Tag `no-bootstrap` werden übersprungen. Die Paketliste kann in `config.local.sh` über die Variable `LXC_BASE_PKGS` angepasst werden.
+
 ## State-Marker
 
 Nach dem ersten erfolgreichen Lauf wird `/var/lib/pve-bootstrap/initialized` angelegt. Solange diese Datei existiert, läuft das Skript im Drift-Modus.
