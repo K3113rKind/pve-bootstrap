@@ -413,7 +413,7 @@ for CT in \$(pct list | tail -n +2 | awk '{print \$1}'); do
     continue
   fi
   echo "==> CT \$CT (\$OS)"
-  pct exec "\$CT" -- bash -c "apt-get update -qq && apt-get install -y \$BASE_PKGS" 2>&1 | tail -5
+  pct exec "\$CT" -- bash -c "apt-get update -qq && apt-get install -y \$BASE_PKGS" 2>&1 | grep -E '^(0 upgraded|[0-9]+ newly|E:|Err:)' || true
 done
 EOF
 )
