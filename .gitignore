@@ -1,0 +1,6 @@
+config.local.sh
+*.bak
+*.bak.*
+*~
+.*.swp
+.DS_Store
