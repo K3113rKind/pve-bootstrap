@@ -24,6 +24,12 @@ ENABLE_NAG_REMOVAL=true
 ENABLE_POSTFIX_DISABLE=true
 ENABLE_FAIL2BAN_PROXMOX_JAIL=true
 
+# --- Ultimate Updater: Soll-Werte für update.conf ------------------------------
+# Steuert, ob der Update-Lauf gestoppte Container/VMs startet, updatet und
+# wieder stoppt. Default: in Ruhe lassen. In config.local.sh überschreibbar.
+UU_STOPPED_CONTAINER="false"
+UU_STOPPED_VM="false"
+
 # --- NFS-Storages -------------------------------------------------------------
 # Leer lassen, um das NFS-Modul zu überspringen.
 # In config.local.sh überschreiben mit echten Werten.

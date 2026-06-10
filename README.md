@@ -17,7 +17,7 @@ Setzt einen frisch installierten PVE-Server in einem Rutsch auf produktiven Stan
 5. fail2ban konfigurieren mit `[sshd]` und `[proxmox]` Jail
 6. NFS-Storages einbinden (optional, via `config.local.sh`)
 7. [Ultimate Updater](https://github.com/BassT23/Proxmox) installieren
-8. `update.conf` anpassen (gestoppte Container/VMs in Ruhe lassen, kein Tag-Filter)
+8. `update.conf` anpassen — Umgang mit gestoppten Containern/VMs konfigurierbar via `UU_STOPPED_CONTAINER` / `UU_STOPPED_VM` (Default: in Ruhe lassen), kein Tag-Filter
 9. Cronjob anlegen (Default: Samstag 03:00, headless Update-Lauf)
 10. LXC-Bootstrap-Skript anlegen + Standardpakete in alle laufenden Debian/Ubuntu-Container
 11. Globalen Befehl `pve-bootstrap` via Symlink in `/usr/local/bin/` anlegen
@@ -91,6 +91,9 @@ NFS_STORAGES=(
 )
 
 CRON_SCHEDULE="0 4 * * 0"   # Sonntag 04:00 statt Samstag
+
+UU_STOPPED_CONTAINER="true" # gestoppte LXCs beim Update-Lauf wecken,
+UU_STOPPED_VM="false"       # updaten und wieder stoppen
 ```
 
 ## Subscription-Nag
@@ -176,6 +179,10 @@ Offizielle Upgrade-Anleitung: https://pve.proxmox.com/wiki/Upgrade_from_8_to_9
 
 ### Aktuell
 
+- `update.conf`-Soll-Werte konfigurierbar: `UU_STOPPED_CONTAINER` / `UU_STOPPED_VM` in `config.default.sh` (Default `false`), überschreibbar via `config.local.sh` — vorher hartcodiert auf `false`
+
+### Davor (Bugfix-Release)
+
 - **Bugfix Nag-Hook:** Das sed-Pattern enthielt einen No-Op (`s/\!/\!/` statt `s/\!//`) — der Nag wurde nie entfernt. Hook auf aktuelle community-scripts-Variante umgestellt, inkl. Verifikation des Patches nach Anwendung
 - **Bugfix Dry-Run:** `apt update` meldete im Dry-Run fälschlich `[OK]` (Operator-Präzedenz `A || B && C`)
 - **Bugfix Backup:** `update.conf.bak.bootstrap` wird jetzt *vor* der ersten Änderung angelegt und enthält damit den Originalzustand
@@ -188,7 +195,7 @@ Offizielle Upgrade-Anleitung: https://pve.proxmox.com/wiki/Upgrade_from_8_to_9
 - Paketinstallation nutzt Bash-Array statt Word-Splitting (Shellcheck SC2086)
 - `apt --reinstall install` → `apt-get install --reinstall` (keine CLI-Warnung in Skripten)
 
-### Davor
+### Frühere Version
 
 - Globaler Befehl `pve-bootstrap` wird nach Initial-Run automatisch via Symlink angelegt
 - LXC-Bootstrap überspringt Container mit Tag `no-bootstrap` (für inkompatible Systeme wie Yunohost)

@@ -23,5 +23,12 @@
 # ENABLE_NAG_REMOVAL=false
 # ENABLE_FAIL2BAN_PROXMOX_JAIL=false
 
+# --- Ultimate Updater: gestoppte Container/VMs mit-updaten (optional) ----------
+# true = Updater startet gestoppte Gäste, updatet sie und stoppt sie wieder.
+# Praktisch für Offline-Container, die einsatzbereit bleiben sollen.
+# Gäste mit Tag "update-exclude" bleiben trotzdem unangetastet.
+# UU_STOPPED_CONTAINER="true"
+# UU_STOPPED_VM="true"
+
 # --- Zusätzliche Host-Tools (optional) ----------------------------------------
 # HOST_TOOLS="$HOST_TOOLS tmux ripgrep fzf"

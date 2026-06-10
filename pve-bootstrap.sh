@@ -374,8 +374,8 @@ mod_uu_config() {
   [[ -f "$conf" ]] || { log_warn "$conf fehlt"; return; }
 
   declare -A wanted=(
-    ["STOPPED_CONTAINER"]="false"
-    ["STOPPED_VM"]="false"
+    ["STOPPED_CONTAINER"]="${UU_STOPPED_CONTAINER:-false}"
+    ["STOPPED_VM"]="${UU_STOPPED_VM:-false}"
     ["ONLY"]=""
   )
 
