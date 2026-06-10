@@ -19,6 +19,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 STATE_DIR="/var/lib/pve-bootstrap"
 STATE_FILE="$STATE_DIR/initialized"
+LOCK_FILE="/var/lock/pve-bootstrap.lock"
 
 # ---------- Config laden -----------------------------------------------------
 [[ -f "$SCRIPT_DIR/config.default.sh" ]] || { echo "config.default.sh fehlt"; exit 1; }
@@ -69,12 +70,16 @@ run_or_dry() {
     log_chg "(dry-run) würde ausführen: $*"
     return 0
   fi
-  "$@"
+  "$@" || { local rc=$?; log_err "Befehl fehlgeschlagen (rc=$rc): $*"; return $rc; }
 }
 
 # ---------- Pre-flight -------------------------------------------------------
 [[ $EUID -eq 0 ]] || { log_err "Muss als root laufen"; exit 1; }
 [[ -d /etc/pve ]] || { log_err "Kein PVE-Host (/etc/pve fehlt)"; exit 1; }
+
+# Lock gegen parallele Läufe
+exec 9>"$LOCK_FILE"
+flock -n 9 || { log_err "Läuft bereits (Lock: $LOCK_FILE)"; exit 1; }
 
 PVE_VERSION=$(pveversion 2>/dev/null | head -1 | grep -oE 'pve-manager/[0-9.]+' | cut -d/ -f2)
 DEB_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
@@ -130,29 +135,57 @@ mod_repos() {
   skip_module repos && { log_skip "[repos] via --skip übersprungen"; return; }
   section "APT-Repos"
 
+  # Klassisches .list-Format (PVE <= 8)
   local ent="/etc/apt/sources.list.d/pve-enterprise.list"
   if [[ -f "$ent" ]] && grep -qE '^[[:space:]]*deb' "$ent"; then
     run_or_dry sed -i.bak 's/^[[:space:]]*deb/#deb/' "$ent"
-    log_ok "Enterprise-Repo deaktiviert"
+    log_ok "Enterprise-Repo (.list) deaktiviert"
   else
-    log_skip "Enterprise-Repo schon deaktiviert/fehlt"
+    log_skip "Enterprise-Repo (.list) schon deaktiviert/fehlt"
   fi
 
   local ceph="/etc/apt/sources.list.d/ceph.list"
   if [[ -f "$ceph" ]] && grep -qE '^[[:space:]]*deb.*enterprise\.proxmox\.com' "$ceph"; then
     run_or_dry sed -i.bak 's|enterprise\.proxmox\.com/debian/ceph-\([a-z]*\) \([a-z]*\) enterprise|download.proxmox.com/debian/ceph-\1 \2 no-subscription|' "$ceph"
-    log_ok "Ceph-Repo umgestellt"
+    log_ok "Ceph-Repo (.list) umgestellt"
   fi
 
+  # deb822-Format (PVE 9 / Trixie): Enterprise-Quellen via 'Enabled: false' deaktivieren
+  local src
+  for src in /etc/apt/sources.list.d/pve-enterprise.sources /etc/apt/sources.list.d/ceph.sources; do
+    if [[ -f "$src" ]] && grep -q 'enterprise\.proxmox\.com' "$src"; then
+      if grep -qiE '^Enabled:[[:space:]]*false' "$src"; then
+        log_skip "$(basename "$src") bereits deaktiviert"
+      elif $DRY_RUN; then
+        log_chg "(dry-run) würde 'Enabled: false' in $src setzen"
+      else
+        cp "$src" "${src}.bak"
+        if grep -qiE '^Enabled:' "$src"; then
+          sed -i 's/^[Ee]nabled:.*/Enabled: false/' "$src"
+        else
+          echo "Enabled: false" >> "$src"
+        fi
+        log_ok "$(basename "$src") deaktiviert (deb822)"
+      fi
+    fi
+  done
+
   local nosub="/etc/apt/sources.list.d/pve-no-subscription.list"
-  if ! grep -rqE '^[[:space:]]*deb.*pve-no-subscription' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+  if ! grep -rqE '^[[:space:]]*deb.*pve-no-subscription' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null \
+     && ! grep -rqE '^Components:.*pve-no-subscription' /etc/apt/sources.list.d/*.sources 2>/dev/null; then
     run_or_dry bash -c "echo 'deb http://download.proxmox.com/debian/pve $DEB_CODENAME pve-no-subscription' > '$nosub'"
     log_ok "no-subscription Repo eingetragen"
   else
     log_skip "no-subscription Repo bereits vorhanden"
   fi
 
-  $DRY_RUN || apt-get update -qq && log_ok "apt update ok" || log_warn "apt update meldete Fehler"
+  if $DRY_RUN; then
+    log_chg "(dry-run) würde 'apt-get update' ausführen"
+  elif apt-get update -qq; then
+    log_ok "apt update ok"
+  else
+    log_warn "apt update meldete Fehler"
+  fi
 }
 
 # --- Modul: Nag (init only) -------------------------------------------------
@@ -163,7 +196,7 @@ mod_nag() {
   section "Subscription-Nag"
 
   local hook="/etc/apt/apt.conf.d/no-nag-script"
-  if [[ -f "$hook" ]]; then
+  if [[ -f "$hook" ]] && grep -q 'NoMoreNagging' "$hook"; then
     log_skip "apt-Hook existiert bereits"
     return
   fi
@@ -171,13 +204,17 @@ mod_nag() {
   if $DRY_RUN; then
     log_chg "(dry-run) würde $hook anlegen + proxmox-widget-toolkit reinstall"
   else
+    # Variante nach community-scripts/ProxmoxVE (post-pve-install.sh):
+    # Guard via grep auf 'NoMoreNagging', Patch via s/\!// (löscht das '!')
     cat > "$hook" <<'HOOK'
-DPkg::Post-Invoke {
-  "dpkg -V proxmox-widget-toolkit | grep -q '/proxmoxlib\\.js$'; if [ $? -eq 1 ]; then { echo 'Removing subscription nag'; sed -i '/.*data\\.status.*{/{s/\\!/\\!/;s/active/NoMoreNagging/}' /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js; }; fi";
-};
+DPkg::Post-Invoke { "if [ -s /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js ] && ! grep -q -F 'NoMoreNagging' /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js; then echo 'Removing subscription nag from UI...'; sed -i '/data\.status/{s/\!//;s/active/NoMoreNagging/}' /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js; fi"; };
 HOOK
-    apt --reinstall install proxmox-widget-toolkit -y >/dev/null 2>&1
-    log_ok "Nag-Hook installiert + sofort angewendet"
+    apt-get install --reinstall -y proxmox-widget-toolkit >/dev/null 2>&1
+    if grep -q -F 'NoMoreNagging' /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js 2>/dev/null; then
+      log_ok "Nag-Hook installiert + Patch verifiziert"
+    else
+      log_warn "Nag-Hook installiert, Patch in proxmoxlib.js NICHT verifizierbar - sed-Pattern prüfen"
+    fi
     log_warn "Browser-Cache leeren (Strg+F5)"
   fi
 }
@@ -204,17 +241,18 @@ mod_tools() {
   skip_module tools && { log_skip "[tools] via --skip übersprungen"; return; }
   section "Host-Tools"
 
-  local missing=""
+  local -a missing=()
+  local pkg
   for pkg in $HOST_TOOLS; do
-    dpkg -s "$pkg" >/dev/null 2>&1 || missing+=" $pkg"
+    dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
   done
 
-  if [[ -z "$missing" ]]; then
+  if [[ ${#missing[@]} -eq 0 ]]; then
     log_skip "Alle Tools bereits installiert"
     return
   fi
-  log "Fehlend:$missing"
-  run_or_dry apt-get install -y $missing
+  log "Fehlend: ${missing[*]}"
+  run_or_dry apt-get install -y "${missing[@]}"
   $DRY_RUN || log_ok "Tools installiert"
 }
 
@@ -279,12 +317,13 @@ mod_nfs() {
   skip_module nfs && { log_skip "[nfs] via --skip übersprungen"; return; }
   section "NFS-Storages"
 
-  if [[ -z "${NFS_SERVER:-}" ]] || [[ ${#NFS_STORAGES[@]} -eq 0 ]]; then
+  if [[ -z "${NFS_SERVER:-}" ]] || [[ -z "${NFS_STORAGES+set}" ]] || [[ ${#NFS_STORAGES[@]} -eq 0 ]]; then
     log_skip "Keine NFS-Storages in config gesetzt"
     return
   fi
 
   local cfg="/etc/pve/storage.cfg"
+  local entry
   for entry in "${NFS_STORAGES[@]}"; do
     local name="${entry%%|*}"; local rest="${entry#*|}"
     local export="${rest%%|*}"; local content="${rest#*|}"
@@ -314,8 +353,15 @@ mod_uu_install() {
   if $DRY_RUN; then
     log_chg "(dry-run) würde Installer ausführen: $UU_INSTALLER_URL"
   else
-    bash <(curl -s "$UU_INSTALLER_URL")
-    log_ok "Ultimate Updater installiert"
+    local installer
+    installer=$(mktemp /tmp/uu-installer.XXXXXX.sh)
+    if curl -fsSL "$UU_INSTALLER_URL" -o "$installer"; then
+      bash "$installer" && log_ok "Ultimate Updater installiert" \
+        || log_err "Ultimate-Updater-Installer beendete sich mit Fehler"
+    else
+      log_err "Download fehlgeschlagen: $UU_INSTALLER_URL"
+    fi
+    rm -f "$installer"
   fi
 }
 
@@ -333,7 +379,7 @@ mod_uu_config() {
     ["ONLY"]=""
   )
 
-  local changes=0
+  local key
   for key in "${!wanted[@]}"; do
     local target="${wanted[$key]}"
     local current
@@ -341,14 +387,16 @@ mod_uu_config() {
     if [[ "$current" == "$target" ]]; then
       log_skip "$key bereits = \"$target\""
     elif $INITIAL_RUN; then
+      # Backup VOR der ersten Änderung (Original sichern)
+      if [[ ! -f "${conf}.bak.bootstrap" ]] && ! $DRY_RUN; then
+        cp "$conf" "${conf}.bak.bootstrap"
+      fi
       run_or_dry sed -i "s/^${key}=\".*\"/${key}=\"${target}\"/" "$conf"
       $DRY_RUN || log_ok "$key gesetzt auf \"$target\""
-      changes=$((changes+1))
     else
       log_warn "Drift in $key: aktuell=\"$current\" soll=\"$target\" (manuell ändern oder --force-initial)"
     fi
   done
-  [[ $changes -gt 0 && ! -f "${conf}.bak.bootstrap" ]] && cp "$conf" "${conf}.bak.bootstrap"
 }
 
 # --- Modul: Cronjob (drift-aware) -------------------------------------------
@@ -451,13 +499,17 @@ mod_uu_config
 mod_cron
 mod_lxc_bootstrap
 
-# State setzen + Symlink anlegen
-if $INITIAL_RUN && ! $DRY_RUN; then
+# State setzen + Symlink pflegen
+if ! $DRY_RUN; then
   mkdir -p "$STATE_DIR"
-  date -Iseconds > "$STATE_FILE"
-  log_ok "State-Marker gesetzt: $STATE_FILE"
+  date -Iseconds > "$STATE_DIR/last-run"
 
-  # Globalen Befehl anlegen (wie 'update' vom Ultimate Updater)
+  if $INITIAL_RUN; then
+    date -Iseconds > "$STATE_FILE"
+    log_ok "State-Marker gesetzt: $STATE_FILE"
+  fi
+
+  # Globalen Befehl anlegen/reparieren (läuft auch im Drift-Modus)
   SYMLINK="/usr/local/bin/pve-bootstrap"
   TARGET="$(realpath "$0")"
   if [[ -L "$SYMLINK" ]] && [[ "$(readlink "$SYMLINK")" == "$TARGET" ]]; then

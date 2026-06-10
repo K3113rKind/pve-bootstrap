@@ -10,8 +10,8 @@ Setzt einen frisch installierten PVE-Server in einem Rutsch auf produktiven Stan
 
 **Beim Erstaufruf** (Initial-Run, einmalige Bestätigung):
 
-1. APT-Repos sauber setzen — Enterprise raus, no-subscription rein, Ceph umstellen
-2. Subscription-Nag-Popup entfernen via apt-Hook (überlebt Updates)
+1. APT-Repos sauber setzen — Enterprise raus, no-subscription rein, Ceph umstellen (unterstützt klassisches `.list`- und deb822-`.sources`-Format)
+2. Subscription-Nag-Popup entfernen via apt-Hook (überlebt Updates, Patch wird nach Anwendung verifiziert)
 3. Postfix abschalten
 4. Host-Tools installieren (fail2ban, iptraf-ng, ncdu, smartmontools, …)
 5. fail2ban konfigurieren mit `[sshd]` und `[proxmox]` Jail
@@ -27,7 +27,10 @@ Setzt einen frisch installierten PVE-Server in einem Rutsch auf produktiven Stan
 - LXC-Bootstrap auf neue Container anwenden
 - Cronjob-Drift erkennen
 - Ultimate-Updater-Config-Drift erkennen
+- Symlink `/usr/local/bin/pve-bootstrap` reparieren, falls das Repo verschoben wurde
 - Init-only-Module werden übersprungen
+
+Ein Lock via `flock` verhindert parallele Läufe (z.B. manuell + Cron gleichzeitig).
 
 ## Voraussetzungen
 
@@ -90,6 +93,12 @@ NFS_STORAGES=(
 CRON_SCHEDULE="0 4 * * 0"   # Sonntag 04:00 statt Samstag
 ```
 
+## Subscription-Nag
+
+Der apt-Hook folgt der aktuellen Variante aus [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE): Guard via `grep -F 'NoMoreNagging'`, Patch via sed auf `proxmoxlib.js`. Nach dem Reinstall des Widget-Toolkits prüft das Skript, ob der Patch tatsächlich in der Datei angekommen ist — schlägt das fehl (z.B. weil Proxmox die JS-Struktur geändert hat), gibt es eine `[WARN]`-Meldung statt eines stillen Fehlschlags.
+
+Nach Anwendung: Browser-Cache leeren (Strg+F5).
+
 ## LXC-Bootstrap: Container ausschließen
 
 Container mit inkompatiblen Paketsystemen (z.B. Yunohost mit `sudo-ldap`) können vom LXC-Bootstrap ausgenommen werden via PVE-Tag:
@@ -111,7 +120,7 @@ Container mit Tag `no-bootstrap` werden übersprungen. Die Paketliste kann in `c
 
 ## State-Marker
 
-Nach dem ersten erfolgreichen Lauf wird `/var/lib/pve-bootstrap/initialized` angelegt. Solange diese Datei existiert, läuft das Skript im Drift-Modus.
+Nach dem ersten erfolgreichen Lauf wird `/var/lib/pve-bootstrap/initialized` angelegt. Solange diese Datei existiert, läuft das Skript im Drift-Modus. Zusätzlich wird bei jedem Lauf `/var/lib/pve-bootstrap/last-run` mit Timestamp geschrieben.
 
 ```bash
 # Marker löschen → nächster Lauf ist wieder Initial-Run
@@ -138,7 +147,7 @@ pve-bootstrap --force-initial
 
 ## PVE 8 → 9 Upgrade
 
-Das Skript funktioniert auf beiden Versionen — `DEB_CODENAME` wird automatisch aus `/etc/os-release` gelesen (`bookworm` oder `trixie`). Beim Upgrade selbst:
+Das Skript funktioniert auf beiden Versionen — `DEB_CODENAME` wird automatisch aus `/etc/os-release` gelesen (`bookworm` oder `trixie`). PVE 9 liefert Repos im deb822-Format (`.sources`) aus; diese werden über `Enabled: false` deaktiviert statt auskommentiert. Beim Upgrade selbst:
 
 1. System vollständig auf PVE 8.4 updaten
 2. `pve8to9 --full` ausführen und alle FAILs beheben
@@ -151,8 +160,10 @@ Offizielle Upgrade-Anleitung: https://pve.proxmox.com/wiki/Upgrade_from_8_to_9
 ## Sicherheitshinweise
 
 - Vor dem Erstaufruf auf einem Produktivsystem unbedingt `--dry-run` nutzen
-- Backups der angefassten Configs werden mit Timestamp angelegt (`*.bak.<DATUM>`)
+- Backups der angefassten Configs werden angelegt: `*.bak`, `*.bak.<DATUM>` bzw. `update.conf.bak.bootstrap` (enthält den Originalzustand vor der ersten Änderung)
 - Bei manuell geänderten Configs (`update.conf`, Cronjob) wird im Drift-Modus nur gewarnt, nicht überschrieben
+- Der Ultimate-Updater-Installer wird vor Ausführung heruntergeladen (`curl -fsSL`); schlägt der Download fehl, bricht das Modul sauber ab statt ein leeres Skript auszuführen
+- Parallele Läufe werden via `flock` blockiert
 
 ## Was bewusst NICHT enthalten ist
 
@@ -164,6 +175,21 @@ Offizielle Upgrade-Anleitung: https://pve.proxmox.com/wiki/Upgrade_from_8_to_9
 ## Changelog
 
 ### Aktuell
+
+- **Bugfix Nag-Hook:** Das sed-Pattern enthielt einen No-Op (`s/\!/\!/` statt `s/\!//`) — der Nag wurde nie entfernt. Hook auf aktuelle community-scripts-Variante umgestellt, inkl. Verifikation des Patches nach Anwendung
+- **Bugfix Dry-Run:** `apt update` meldete im Dry-Run fälschlich `[OK]` (Operator-Präzedenz `A || B && C`)
+- **Bugfix Backup:** `update.conf.bak.bootstrap` wird jetzt *vor* der ersten Änderung angelegt und enthält damit den Originalzustand
+- deb822-Support: `pve-enterprise.sources` / `ceph.sources` (PVE 9) werden via `Enabled: false` deaktiviert
+- Ultimate-Updater-Installer: Download nach tmp mit `curl -fsSL` + Fehlerbehandlung statt `curl -s | bash`
+- `flock`-Lock gegen parallele Läufe
+- `run_or_dry` loggt fehlgeschlagene Befehle mit Exit-Code
+- Symlink wird auch im Drift-Modus geprüft/repariert; `last-run`-Timestamp bei jedem Lauf
+- `set -u`-Guard für nicht gesetztes `NFS_STORAGES`-Array
+- Paketinstallation nutzt Bash-Array statt Word-Splitting (Shellcheck SC2086)
+- `apt --reinstall install` → `apt-get install --reinstall` (keine CLI-Warnung in Skripten)
+
+### Davor
+
 - Globaler Befehl `pve-bootstrap` wird nach Initial-Run automatisch via Symlink angelegt
 - LXC-Bootstrap überspringt Container mit Tag `no-bootstrap` (für inkompatible Systeme wie Yunohost)
 - LXC-Bootstrap Output kompakt: nur Zusammenfassungszeile pro Container
@@ -173,6 +199,7 @@ Offizielle Upgrade-Anleitung: https://pve.proxmox.com/wiki/Upgrade_from_8_to_9
 - LXC-Bootstrap erzwingt `LC_ALL=C` für apt-Output (verhindert Probleme mit deutschen Locales)
 
 ### Initial
+
 - Modulare Architektur mit Initial/Drift-Modus
 - Idempotente Ausführung, Bestätigung nur beim ersten Lauf
 - Config-Pattern: `config.default.sh` + gitignoriertes `config.local.sh`
@@ -186,7 +213,7 @@ MIT
 Inspiriert durch und nutzt:
 
 - [BassT23/Proxmox](https://github.com/BassT23/Proxmox) (GPL) — Ultimate Updater, wird via Installer als Dependency eingebunden
-- [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE) (MIT) — Vorbild für Post-Install-Struktur
+- [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE) (MIT) — Vorbild für Post-Install-Struktur; Nag-Hook-Variante übernommen
 
-Eigenständige Implementierung, keine Code-Übernahme.
+Eigenständige Implementierung, keine Code-Übernahme darüber hinaus.
 Teile dieses Codes wurden mit Hilfe von KI generiert.
