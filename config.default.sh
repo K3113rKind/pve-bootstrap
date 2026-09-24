@@ -12,7 +12,8 @@ CRON_CMD="/etc/ultimate-updater/update.sh -s >> /var/log/ultimate-updater-cron.l
 CRON_MARKER="# pve-bootstrap:ultimate-updater"
 
 # --- Pakete für den PVE-Host --------------------------------------------------
-HOST_TOOLS="fail2ban iptraf-ng ncdu git ethtool neofetch smartmontools \
+# Nicht verfügbare Pakete (z.B. fastfetch auf Bookworm) werden mit Warnung übersprungen.
+HOST_TOOLS="fail2ban iptraf-ng ncdu git ethtool fastfetch smartmontools \
             curl wget gnupg ca-certificates htop nano vim less rsync"
 
 # --- Pakete für Debian/Ubuntu LXCs --------------------------------------------

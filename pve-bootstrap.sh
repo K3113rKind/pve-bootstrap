@@ -241,11 +241,20 @@ mod_tools() {
   skip_module tools && { log_skip "[tools] via --skip übersprungen"; return; }
   section "Host-Tools"
 
-  local -a missing=()
-  local pkg
+  local -a missing=() unavailable=()
+  local pkg cand
   for pkg in $HOST_TOOLS; do
-    dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+    dpkg -s "$pkg" >/dev/null 2>&1 && continue
+    # Pakete ohne Installationskandidat (z.B. neofetch ab Trixie entfernt) würden
+    # sonst den kompletten apt-get-Aufruf scheitern lassen
+    cand=$(apt-cache policy "$pkg" 2>/dev/null | awk '/Candidate:/ {print $2}')
+    if [[ -z "$cand" || "$cand" == "(none)" ]]; then
+      unavailable+=("$pkg")
+    else
+      missing+=("$pkg")
+    fi
   done
+  [[ ${#unavailable[@]} -gt 0 ]] && log_warn "Nicht in den Repos verfügbar, übersprungen: ${unavailable[*]}"
 
   if [[ ${#missing[@]} -eq 0 ]]; then
     log_skip "Alle Tools bereits installiert"
@@ -454,7 +463,7 @@ SKIP_TAG="no-bootstrap"
 for CT in \$(pct list | tail -n +2 | awk '{print \$1}'); do
   STATUS=\$(pct status "\$CT")
   OS=\$(pct config "\$CT" | awk '/^ostype/ {print \$2}')
-  TAGS=\$(pct config "\$CT" | awk '/^tags:/ {print \$2}')
+  TAGS=\$(pct config "\$CT" | awk '/^tags:/ {print \$2}' | tr ';' ',')
   [[ "\$STATUS" != "status: running" ]] && continue
   [[ "\$OS" =~ debian|ubuntu ]] || continue
   if [[ ",\$TAGS," == *",\$SKIP_TAG,"* ]]; then

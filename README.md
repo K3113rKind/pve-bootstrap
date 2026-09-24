@@ -43,7 +43,7 @@ Ein Lock via `flock` verhindert parallele Läufe (z.B. manuell + Cron gleichzeit
 
 ```bash
 # Repo auf den PVE-Host klonen
-git clone https://github.com/<USER>/pve-bootstrap.git
+git clone https://github.com/K3113rKind/pve-bootstrap.git
 cd pve-bootstrap
 
 # Lokale Config anlegen (NFS-Server, eigene Werte)
@@ -110,6 +110,8 @@ Container mit inkompatiblen Paketsystemen (z.B. Yunohost mit `sudo-ldap`) könne
 pct set 150 --tags no-bootstrap
 pct set 151 --tags no-bootstrap
 ```
+
+Achtung: `pct set --tags` ersetzt alle vorhandenen Tags. Bei Containern mit bestehenden Tags alle zusammen setzen, z.B. `pct set 161 --tags "docker;no-bootstrap"`. Mehrere Tags werden korrekt erkannt.
 
 Der LXC-Bootstrap überspringt Container mit diesem Tag automatisch.
 
@@ -178,6 +180,12 @@ Offizielle Upgrade-Anleitung: https://pve.proxmox.com/wiki/Upgrade_from_8_to_9
 ## Changelog
 
 ### Aktuell
+
+- **Bugfix Host-Tools:** `neofetch` ist ab Debian Trixie nicht mehr in den Repos – ein einziges fehlendes Paket ließ den kompletten `apt-get install` scheitern. Pakete ohne Installationskandidat werden jetzt mit Warnung übersprungen; `neofetch` durch `fastfetch` ersetzt (auf Bookworm nicht verfügbar → wird übersprungen)
+- **Bugfix LXC-Bootstrap:** Tag `no-bootstrap` wurde nur erkannt, wenn er der einzige Tag war (PVE trennt mehrere Tags mit `;`)
+- README: Clone-URL korrigiert, Hinweis zu `pct set --tags`
+
+### Davor
 
 - `update.conf`-Soll-Werte konfigurierbar: `UU_STOPPED_CONTAINER` / `UU_STOPPED_VM` in `config.default.sh` (Default `false`), überschreibbar via `config.local.sh` — vorher hartcodiert auf `false`
 
