@@ -86,8 +86,15 @@ Beispiel `config.local.sh`:
 ```bash
 NFS_SERVER="192.168.0.4"
 NFS_STORAGES=(
+  # name|export|content[|mount-options[|create-subdirs]]
   "SynologyTemplate|/volume1/ProxmoxTemplates|iso,vztmpl"
   "SynologyBackup|/volume1/ProxmoxBackup|backup"
+  # Medien-Shares für Bind-Mounts in CTs (z. B. arr-stack, Jellyfin):
+  # vers=3, create-subdirs 0 → PVE legt keine leeren images/-Ordner an
+  "SynologyFilme|/volume1/Filme|images|vers=3|0"
+  "SynologyFilmeEmi|/volume1/Filme_Emi|images|vers=3|0"
+  "SynologySerien|/volume1/Serien|images|vers=3|0"
+  "SynologyTemp|/volume1/temp|images|vers=3|0"
 )
 
 CRON_SCHEDULE="0 4 * * 0"   # Sonntag 04:00 statt Samstag
@@ -180,6 +187,10 @@ Offizielle Upgrade-Anleitung: https://pve.proxmox.com/wiki/Upgrade_from_8_to_9
 ## Changelog
 
 ### Aktuell
+
+- **NFS-Modul:** `NFS_STORAGES` akzeptiert optional Mount-Optionen und `create-subdirs` (`name|export|content|vers=3|0`). Damit lassen sich die Medien-Storages für Bind-Mounts identisch auf jedem Node anlegen. Anlass: CT 161 startete nach dem Umzug auf den R740 nicht, weil `SynologyFilmeEmi` dort fehlte. Das bisherige 3-Feld-Format funktioniert unverändert
+
+### Davor (Trixie-Fixes)
 
 - **Bugfix Host-Tools:** `neofetch` ist ab Debian Trixie nicht mehr in den Repos – ein einziges fehlendes Paket ließ den kompletten `apt-get install` scheitern. Pakete ohne Installationskandidat werden jetzt mit Warnung übersprungen; `neofetch` durch `fastfetch` ersetzt (auf Bookworm nicht verfügbar → wird übersprungen)
 - **Bugfix LXC-Bootstrap:** Tag `no-bootstrap` wurde nur erkannt, wenn er der einzige Tag war (PVE trennt mehrere Tags mit `;`)

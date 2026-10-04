@@ -10,10 +10,16 @@
 # =============================================================================
 
 # --- NFS-Storage einbinden ----------------------------------------------------
+# Format: "name|export|content[|mount-options[|create-subdirs]]"
 # NFS_SERVER="192.168.0.4"
 # NFS_STORAGES=(
 #   "SynologyTemplate|/volume1/ProxmoxTemplates|iso,vztmpl"
 #   "SynologyBackup|/volume1/ProxmoxBackup|backup"
+#   # Medien-Shares (Bind-Mount in CTs): vers=3, keine images/-Unterordner
+#   "SynologyFilme|/volume1/Filme|images|vers=3|0"
+#   "SynologyFilmeEmi|/volume1/Filme_Emi|images|vers=3|0"
+#   "SynologySerien|/volume1/Serien|images|vers=3|0"
+#   "SynologyTemp|/volume1/temp|images|vers=3|0"
 # )
 
 # --- Schedule überschreiben (optional) ----------------------------------------

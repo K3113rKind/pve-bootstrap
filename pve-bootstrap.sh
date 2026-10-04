@@ -334,16 +334,21 @@ mod_nfs() {
   local cfg="/etc/pve/storage.cfg"
   local entry
   for entry in "${NFS_STORAGES[@]}"; do
-    local name="${entry%%|*}"; local rest="${entry#*|}"
-    local export="${rest%%|*}"; local content="${rest#*|}"
+    # Format: name|export|content[|mount-options[|create-subdirs]]
+    local f=(); IFS='|' read -r -a f <<< "$entry"
+    local name="${f[0]}" export="${f[1]}" content="${f[2]}"
+    local opts="${f[3]:-}" subdirs="${f[4]:-}"
 
     if grep -q "^nfs: $name$" "$cfg"; then
       log_skip "Storage '$name' bereits konfiguriert"
       continue
     fi
+    local extra=()
+    [[ -n "$opts" ]] && extra+=(--options "$opts")
+    [[ -n "$subdirs" ]] && extra+=(--create-subdirs "$subdirs")
     run_or_dry pvesm add nfs "$name" \
       --server "$NFS_SERVER" --export "$export" \
-      --content "$content" --prune-backups "keep-all=1"
+      --content "$content" --prune-backups "keep-all=1" "${extra[@]}"
     $DRY_RUN || log_ok "Storage '$name' hinzugefügt"
   done
 }
